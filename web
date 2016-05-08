@@ -1,0 +1,1 @@
+zip(s1, s2): creates a list of tuples which havequir for the firs element a element from s1 and as a second one the corresponding from s2
