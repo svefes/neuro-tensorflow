@@ -39,10 +39,11 @@ b_conv1 = bias_var([32])
 #apply the convolution step (~ compute the input for the convolution neurons) + apply ReLU 
 #activation for every conv neuron to get their output for the pooling
 out_conv1 = tf.nn.relu(conv(x_image, W_conv1) + b_conv1)
-
+tf.histogram_summary('output 1st conv-layer', out_conv1)
 #apply the pooling step (out_conv1 as input)
 out_pool1 = max_pool22(out_conv1)
 debug_out_pool1_shape = tf.shape(out_pool1)
+tf.histogram_summary('output 1st pooling', out_pool1)
 #add a second conv/pooling layer with now 64 kernels (! from the firs layers we get a in_channel
 #of 32)
 #initialize a weightmatrix and a biasvector
@@ -52,7 +53,7 @@ b_conv2 = bias_var([64])
 #apply the convolution step (~ compute the input for the convolution neurons) + apply ReLU 
 #activation for every conv neuron to get their output for the pooling
 out_conv2 = tf.nn.relu(conv(out_pool1, W_conv2) + b_conv2)
-
+tf.histogram_summary('output 2nd conv-layer', out_conv2)
 #apply the pooling step (out_conv1 as input)
 out_pool2 = max_pool22(out_conv2)
 debug_out_pool2_shape = tf.shape(out_pool2)
@@ -62,6 +63,7 @@ W_fc1 = weight_var([7*7*64, 1024])
 b_fc1 = bias_var([1024])
 
 out_pool2_res =tf.reshape(out_pool2, [-1, 7*7*64])
+tf.histogram_summary('output 2nd pooling', out_pool2)
 out_1024neurons = tf.nn.relu(tf.matmul(out_pool2_res, W_fc1) + b_fc1)
 
 #add dropout
@@ -76,21 +78,29 @@ y_conv = tf.nn.softmax(tf.matmul(out_1024neurons_drop, W_fc2) + b_fc2)
 
 #training
 cross_entropy = tf.reduce_sum(y_*tf.log(y_conv))
+norm_cross_entropy = tf.reduce_mean(cross_entropy)
+tf.scalar_summary('cross entropy', norm_cross_entropy)
 train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+tf.scalar_summary('accuracy', accuracy)
 
 sess = tf.Session()
+merged = tf.merge_all_summaries()
+train_writer = tf.train.SummaryWriter('MNIST_data/logs/train', sess.graph)
+test_writer = tf.train.SummaryWriter('MNIST_data/logs/test')
 sess.run(tf.initialize_all_variables())
 
 
-for i in range(20):
+for i in range(50):
     batch = mnist.train.next_batch(50)
     if i%10 == 0:
-        train_accuracy, shape1, shape2 = sess.run([accuracy,debug_out_pool1_shape,debug_out_pool2_shape], feed_dict = {x: batch[0], y_: batch[1], keep_prob: 1.0})
-        print('{}, {}'.format(shape1, shape2))
+        summary, train_accuracy = sess.run([merged, accuracy], feed_dict = {x: batch[0], y_: batch[1], keep_prob: 1.0})
+        test_writer.add_summary(summary, i)	
         print('step{0:d}, training accuracy: {1:g}'.format(i, train_accuracy))
-    sess.run(train_step, feed_dict = {x: batch[0], y_: batch[1], keep_prob: 0.5})
+    else:
+        summary, _ = sess.run([merged, train_step], feed_dict = {x: batch[0], y_: batch[1], keep_prob: 0.5})
+        train_writer.add_summary(summary, i)
 
 #huge amount of data -> 4GiB neede
 #print("test accuracy {0:g}".format(sess.run(accuracy, feed_dict = {x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})))
