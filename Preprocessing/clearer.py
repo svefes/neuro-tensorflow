@@ -1,3 +1,5 @@
+#@TODO: AuthorIsChannelOwner is missing (no data available)
+#what about normalizing
 import nltk
 import re
 import pickle
@@ -49,6 +51,7 @@ def get_features(li):
     di_cluster = dict()
     top_channel = dict()
     di_time = dict() #channel --> list of all insert-timestamps
+    di_author = dict() #channel --> list of author plus values
 
     #1.)sort all valid stemmed words(value) acccording to their channel(key)
     #into di_channel
@@ -78,12 +81,35 @@ def get_features(li):
     di_cluster = {channel: list() for channel in di_channel}
     di_time = {channel: list() for channel in di_channel}
     reg_punct = re.compile(r'\W')
-    reg_end = re.compile(r'[!?,]')
+    reg_end = re.compile(r'[\!\?\.]')
     reg_quest = re.compile(r'\?\s*$')
+    reg_break = re.compile(r'\n')
+    reg_ref = re.compile(r'@(Folie|Slide)\s?[a-zA-Z]?\.?\s?(\d+)')
+    reg_smile = re.compile(r'[:;BXx=][-o]?[\)/\(DPp\|]|[\^][\.,-_]?[\^]')# also matches x) which could be part of formula
+    reg_script = re.compile(r'<\s*script[\s/>]')
+    reg_alpha = re.compile(r'\w')
 
-    #fill di_time
+
+    #fill di_time, di_author
     for post in li:
         di_time[int(post[1])].append(dparser.parse(post[8]))
+        if (int(post[1]),int(post[2])) in di_author:
+            di_author[(int(post[1]),int(post[2]))].append(int(post[-5]))
+        else:
+            di_author[(int(post[1]),int(post[2]))] = [int(post[-5])]
+
+    for k in di_author:
+        total = len(di_author[k])
+        pos = 0
+        neg = 0
+        for val in di_author[k]:
+            if val > 0:
+                pos += 1
+            else:
+                neg += 1
+        pos_rate = pos/total
+        neg_rate = neg/total
+        di_author[k] = [total, pos_rate, neg_rate]
 
     #sort values of di_time according to inserttime
     for l in di_time.values():
@@ -99,15 +125,16 @@ def get_features(li):
         #get set of valid tagged words per post
         #get Tokencount/Validtokencount
         ch = int(post[1])
+        au = int(post[2])
         sent = post[3] #text without metadata
         tagged = tagging(sent)
         vtagged = valid_tagging(sent)
         stemmed = stemming(vtagged)
         set_stemmed = set(stemmed)
-        tc = len(tagged)
-        vtc = len(vtagged)
+        tc = len(tagged) #normalizing with min/max?
+        vtc = len(vtagged) #normalizing with min/max?
         non_stop = 0
-        dist_ratio = 0
+        dist_ratio = 1
         if tc > 0:
             non_stop = vtc/tc
         if vtc > 0:
@@ -120,9 +147,9 @@ def get_features(li):
                 max_over[ch][0] = current_over
                 max_over[ch][1] = j+1
         if max_over[ch][1]:
-            dist_over = len(di_stemmed[ch])-max_over[ch][1]+1
+            dist_over = len(di_stemmed[ch])-max_over[ch][1]+1 #  normalizing with total number of posting
         else:
-            dist_over = None 
+            dist_over = 0 
         di_stemmed[ch].append(set_stemmed)
 
         #get Channel Overlap
@@ -148,7 +175,7 @@ def get_features(li):
             if max_sim[0] != -1:
                 li_cluster[max_sim[0]][0] = post[8]
                 li_cluster[max_sim[0]].append(set_stemmed)
-                cluster_size = len(li_cluster[max_sim[0]])-1
+                cluster_size = len(li_cluster[max_sim[0]])-1 #normalizing with min/max cluster size
             else:
                 li_cluster.append([post[8], set_stemmed])
                 cluster_size = 1    
@@ -164,20 +191,20 @@ len(set.union(*li_cluster[max_sim[0]][1:]))
         next_time = di_time[ch][2]
             
         
-        dur_to_prev = current_time - prev_time
+        dur_to_prev = current_time - prev_time #normalizing with min/max
 
         comp_freq = dur_to_prev.total_seconds()/di_time[ch][-1]
             
-        dur_to_next = next_time - current_time
+        dur_to_next = next_time - current_time #normalizing with min/max
         del di_time[ch][0]
         
-        create_dur = dparser.parse(post[6])-dparser.parse(post[5])   
+        create_dur = dparser.parse(post[6])-dparser.parse(post[5])  #normalizing with min/max 
         
         dur_per_w = '0:00:00'
         if tc:
             dur_per_w = create_dur/tc 
 
-        hold_back = dparser.parse(post[7])-dparser.parse(post[6])
+        hold_back = dparser.parse(post[7])-dparser.parse(post[6]) #normalizing with min/max
         
         #get content features
         post_type =1
@@ -199,9 +226,31 @@ len(set.union(*li_cluster[max_sim[0]][1:]))
         ends_with_quest = 0
         if reg_quest.search(sent):
             ends_with_quest = 1
-        
+
+        line_break = 0
+        if reg_break.search(sent):
+            line_break = 1
+
+        smiley = 0
+        if reg_smile.search(sent):
+            smiley = 1
+
+        alpha = 0
+        if reg_alpha.match(sent):
+            alpha = 1
             
+        script_tag = 0
+        if reg_script.search(sent):
+            script_tag = 1
+
+        #get author features !! AuthorIsChannelOwner is missing (no data available)
+        post_ratio = di_author[(ch,au)][0]
+        
+        pos_ratio = di_author[(ch,au)][1]
+        
+        neg_ratio = di_author[(ch,au)][2]
+        
         li[i].append([tc, vtc, non_stop, dist_ratio, max_over[ch][0], dist_over, 
 channel_over, cluster_size, cluster_over, str(dur_to_prev), comp_freq, str(dur_to_next), str(create_dur), str(dur_per_w),  
-str(hold_back), post_type, is_handmade, punct, ends_with_quest])
+str(hold_back), post_type, is_handmade, punct, ends_with_quest, line_break, smiley, alpha, script_tag, post_ratio, pos_ratio, neg_ratio])
    
