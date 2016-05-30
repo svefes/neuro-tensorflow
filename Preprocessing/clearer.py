@@ -4,9 +4,12 @@ import nltk
 import re
 import pickle
 import csv
+import random
+import numpy
+import pymysql as sql
+from datetime import datetime
 import dateutil.parser as dparser
 from nltk.corpus import stopwords
-
 
 def pure_text(path):
     '''extracts pure posts without metadata to a list
@@ -45,7 +48,7 @@ def stemming(sent):
     gs = nltk.stem.snowball.GermanStemmer()
     return [gs.stem(w) for w in sent]
 
-def get_features(li):
+def get_features(li):    
     di_channel = dict() #channel --> list of all valid stemmed word
     di_stemmed = dict() #channel --> list of sets of valid stemmed words per post (in order of inserttime)
     di_cluster = dict()
@@ -94,9 +97,9 @@ def get_features(li):
     for post in li:
         di_time[int(post[1])].append(dparser.parse(post[8]))
         if (int(post[1]),int(post[2])) in di_author:
-            di_author[(int(post[1]),int(post[2]))].append(int(post[-5]))
+            di_author[(int(post[1]),int(post[2]))].append(int(post[10]))
         else:
-            di_author[(int(post[1]),int(post[2]))] = [int(post[-5])]
+            di_author[(int(post[1]),int(post[2]))] = [int(post[10])]
 
     for k in di_author:
         total = len(di_author[k])
@@ -191,20 +194,20 @@ len(set.union(*li_cluster[max_sim[0]][1:]))
         next_time = di_time[ch][2]
             
         
-        dur_to_prev = current_time - prev_time #normalizing with min/max
+        dur_to_prev = (current_time - prev_time).total_seconds() #normalizing with min/max
 
-        comp_freq = dur_to_prev.total_seconds()/di_time[ch][-1]
+        comp_freq = dur_to_prev/di_time[ch][-1]
             
-        dur_to_next = next_time - current_time #normalizing with min/max
+        dur_to_next = (next_time - current_time).total_seconds() #normalizing with min/max
         del di_time[ch][0]
         
-        create_dur = dparser.parse(post[6])-dparser.parse(post[5])  #normalizing with min/max 
+        create_dur = (dparser.parse(post[6])-dparser.parse(post[5])).total_seconds()  #normalizing with min/max 
         
-        dur_per_w = '0:00:00'
+        dur_per_w = 0
         if tc:
             dur_per_w = create_dur/tc 
 
-        hold_back = dparser.parse(post[7])-dparser.parse(post[6]) #normalizing with min/max
+        hold_back = (dparser.parse(post[7])-dparser.parse(post[6])).total_seconds() #normalizing with min/max
         
         #get content features
         post_type =1
@@ -251,6 +254,33 @@ len(set.union(*li_cluster[max_sim[0]][1:]))
         neg_ratio = di_author[(ch,au)][2]
         
         li[i].append([tc, vtc, non_stop, dist_ratio, max_over[ch][0], dist_over, 
-channel_over, cluster_size, cluster_over, str(dur_to_prev), comp_freq, str(dur_to_next), str(create_dur), str(dur_per_w),  
-str(hold_back), post_type, is_handmade, punct, ends_with_quest, line_break, smiley, alpha, script_tag, post_ratio, pos_ratio, neg_ratio])
-   
+channel_over, cluster_size, cluster_over, dur_to_prev, comp_freq, dur_to_next,
+create_dur, dur_per_w, hold_back, post_type, is_handmade, punct, ends_with_quest,
+line_break, smiley, alpha, script_tag, post_ratio, pos_ratio, neg_ratio])
+
+def train_test(l , rate = 6/7): # 6/7 is the rate of the MNIST data
+    random.seed(datetime.now())
+    l_copy = l[:]
+    random.shuffle(l_copy)
+    return (l_copy[0:round(rate*len(l_copy))], l_copy[round(rate*len(l_copy)):]) 
+    
+def next_batch(l, n = 100):
+    random.seed(datetime.now())
+    if n=='all':
+        rand = [random.choice(l) for i in range(len(l))]
+    else:
+        rand = [random.choice(l) for i in range(n)]
+    features = list()
+    assess = list()
+    for li in rand:
+        features.append(li[-1])
+        assess.append(int(li[-2])+1)
+    assess = numpy.eye(3)[assess] # make one-hot-vector for every input in assess
+    return (features, assess)
+
+def init():
+#delete after testing
+    li = listify_postings('Doepke.csv')
+    get_features(li)
+    train, test = train_test(li)
+    return (li, train, test)
