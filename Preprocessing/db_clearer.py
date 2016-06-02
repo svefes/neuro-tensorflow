@@ -54,12 +54,12 @@ def get_features(li):
     #connect to db "wecsript" on localhost
     con = sql.connect (host = 'localhost', user = 'sven', passwd = 'nevs', db='wescript')
     cur = con.cursor()
-    cur.execute('CREATE TABLE IF NOT EXISTS assessedPosts (post_id INT PRIMARY KEY,\
+    cur.execute('CREATE TABLE IF NOT EXISTS assessedPosts (post_id INT PRIMARY KEY, ch_id INT,\
 tokenCount DOUBLE, n_tokenCount DOUBLE, validTokenCount DOUBLE, n_validTokenCount DOUBLE, nonStopwordRatio DOUBLE,\
 distinctWordRatio DOUBLE, overlapPrevious DOUBLE, overlapDistance DOUBLE, n_overlapDistance DOUBLE,\
 overlapChannel DOUBLE, clusterSize DOUBLE, n_clusterSize DOUBLE, overlapCluster DOUBLE, durationToPrevious DOUBLE,\
 n_durationToPrevious DOUBLE, comparedFrequency DOUBLE, durationToNext DOUBLE, n_durationToNext DOUBLE,\
-creationDuration DOUBLE, n_creationDuration DOUBLE, durationPerWord DOUBLE,\
+creationDuration DOUBLE, n_creationDuration DOUBLE, durationPerWord DOUBLE, n_durationPerWord DOUBLE,\
 holdBackDuration DOUBLE, n_holdBackDuration DOUBLE, postingTypeText BOOLEAN, postingTypeImage BOOLEAN,\
 postingTypeEquation BOOLEAN, imageIsHandmade BOOLEAN, punctuationLevel FLOAT,\
 endsWithQuestionmark BOOLEAN, containsLinebreak BOOLEAN, containsSlideReference BOOLEAN,\
@@ -71,7 +71,7 @@ tokenCountMin DOUBLE, tokenCountMax DOUBLE, valdiTokenCountMin DOUBLE, validToke
 overlapDistanceMin DOUBLE,overlapDistanceMax DOUBLE, clusterSizeMin DOUBLE, clusterSizeMax DOUBLE,\
 durationToPreviousMin DOUBLE, durationToPreviousMax DOUBLE,durationToNextMin DOUBLE, durationToNextMax DOUBLE,\
 creationDurationMin DOUBLE, creationDurationMax DOUBLE, holdBackDurationMin DOUBLE,\
-holdBackDurationMin DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB, clusterDict BLOB)')
+holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB, clusterDict BLOB)')
 
     di_max = dict() 
     di_min = dict()
@@ -103,7 +103,7 @@ holdBackDurationMin DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
             di_author[channel_id].update({int(post[2]):[int(post[10])]})
         else:
             di_author[channel_id][int(post[2])].append(int(post[10]))
-
+    print(di_author)
     for channel in di_channel.keys():
         #total author values
         for au in di_author[channel]:
@@ -128,7 +128,7 @@ holdBackDurationMin DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
                     di_author[channel][au][0] += temp_author[au][0]
                     di_author[channel][au][0] += temp_author[au][1]
                     di_author[channel][au][0] += temp_author[au][2]
-                    
+    print(di_author)           
     #init of di_stemmed, di_cluster, punctuation-regex
     for channel in di_channel.keys():
         if cur.execute('SELECT stemmedPosts, clusterDict FROM channelStatistics WHERE ch_id=%s', (channel,)):
@@ -189,7 +189,10 @@ holdBackDurationMin DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
         #find posting with max overlap and the distance to it
         max_over = [0, None]
         for j, s in enumerate(di_stemmed[ch][:fin]):
-            current_over = len(s[2]&set_stemmed)
+            if len(s[2])>0:
+                current_over = len(s[2]&set_stemmed)/len(s[2])
+            else:
+                current_over = 0
             if max_over[0] <= current_over:
                 max_over[0] = current_over
                 max_over[1] = j
@@ -203,7 +206,10 @@ holdBackDurationMin DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
             for j, s in enumerate(di_stemmed[ch][fin+1:]):
                 max_over = [0, None]
                 for k, t in enumerate(di_stemmed[ch][:fin+1+j]):
-                    current_over = len(t[2]&s[2])
+                    if len(t[2]):
+                        current_over = len(t[2]&s[2])/len(t[2])
+                    else:
+                        current_over = 0
                     if max_over[0] <= current_over:
                         max_over[0] = current_over
                         max_over[1] = k
@@ -211,13 +217,13 @@ holdBackDurationMin DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
 , (max_over[0], fin+1+j-max_over[1], s[0]))
                     
         #make clusters
-        cluster_over = 0
-        cluster_size = 0
+        cluster_over = 1
+        cluster_size = 1
         #if current_time is somewhere in the middle, all posts possibly have to be assigned to new clusters
         if time_inter:
             di_cluster[ch] = list()
             for j,s in enumerate(di_stemmed[ch]):
-                cluster_size = 0
+                cluster_size = 1
                 li_cluster = di_cluster[ch]
                 max_sim = [-1, 0]
                 if not li_cluster:
@@ -274,7 +280,7 @@ len(set.union(*li_cluster[max_sim[0]][1:]))
                     cluster_size = 1    
 
             
-            if len(set.union(*li_cluster[max_sim[0]][1:])) > 0:
+            if max_sim[0] != -1 and len(set.union(*li_cluster[max_sim[0]][1:])) > 0:
                 cluster_over = len(set_stemmed&(set.union(*li_cluster[max_sim[0]][1:])))/\
 len(set.union(*li_cluster[max_sim[0]][1:]))
                        
@@ -355,10 +361,14 @@ len(set.union(*li_cluster[max_sim[0]][1:]))
                 di_max[ch][6] = create_dur
             if di_min[ch][6] > create_dur:
                 di_min[ch][6] = create_dur
-            if di_max[ch][7] < hold_back:
-                di_max[ch][7] = hold_back
-            if di_min[ch][7] > hold_back:
-                di_min[ch][7] = hold_back
+            if di_max[ch][7] < dur_per_w:
+                di_max[ch][7] = dur_per_w
+            if di_min[ch][7] > dur_per_w:
+                di_min[ch][7] = dur_per_w
+            if di_max[ch][8] < hold_back:
+                di_max[ch][8] = hold_back
+            if di_min[ch][8] > hold_back:
+                di_min[ch][8] = hold_back
                 
         else:
             if cur.execute('SELECT * FROM channelStatistics WHERE ch_id=%s', (ch,)):
@@ -378,24 +388,12 @@ len(set.union(*li_cluster[max_sim[0]][1:]))
                 di_min[ch][6] = fetch[12]
                 di_max[ch][6] = fetch[13]
                 di_min[ch][7] = fetch[14]
-                di_max[ch][7] = fetch[15]                
+                di_max[ch][7] = fetch[15]
+                di_min[ch][8] = fetch[16]
+                di_max[ch][8] = fetch[17]
             else:
-                di_max[ch][0] = tc
-                di_min[ch][0] = tc
-                di_max[ch][1] = vtc
-                di_min[ch][1] = vtc
-                di_max[ch][2] = dist_over
-                di_min[ch][2] = dist_over
-                di_max[ch][3] = cluster_size
-                di_min[ch][3] = cluster_size
-                di_max[ch][4] = 0
-                di_min[ch][4] = 0
-                di_max[ch][5] = 0
-                di_min[ch][5] = 0
-                di_max[ch][6] = create_dur
-                di_min[ch][6] = create_dur
-                di_max[ch][7] = hold_back
-                di_min[ch][7] = hold_back
+                di_max[ch]=[tc, vtc,dist_over, cluster_size,0,0,create_dur,dur_per_w, hold_back]
+                di_min[ch]=[tc, vtc,dist_over, cluster_size,0,0,create_dur,dur_per_w, hold_back]#0 for dur to prev can be used as first one will always have 0
                 
 
         if cur.execute('SELECT * FROM assessedPosts WHERE post_id = %s', p_id):
@@ -410,9 +408,9 @@ containsSmiley=%s, beginsWithAlphanumeric=%s, containsScriptTags=%s WHERE post_i
 post_type_i, post_type_e, is_handmade, punct, ends_with_quest,line_break, slide_ref, smiley, alpha, script_tag, p_id))
         else:
             cur.execute('INSERT INTO assessedPosts VALUES\
-(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
-(p_id, tc, 0, vtc, 0, non_stop, dist_ratio, max_over[0], dist_over,0,0, cluster_size, 0, cluster_over,0, 0, 0, 0, 0,\
-create_dur, 0, dur_per_w, hold_back, 0, post_type_t, post_type_i, post_type_e,is_handmade, punct, ends_with_quest,\
+(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
+(p_id,ch, tc, 0, vtc, 0, non_stop, dist_ratio, max_over[0], dist_over,0,0, cluster_size, 0, cluster_over,0, 0, 0, 0, 0,\
+create_dur, 0, dur_per_w, 0, hold_back, 0, post_type_t, post_type_i, post_type_e,is_handmade, punct, ends_with_quest,\
 line_break, slide_ref, smiley, alpha, script_tag,0,0,0,0))            
         con.commit()
 
@@ -448,7 +446,7 @@ for i in range(1,len(di_stemmed[ch])-1))/(len(di_stemmed[ch])-1)
             if di_max[ch][5] < dur_to_next:
                 di_max[ch][5] = dur_to_next
             if di_min[ch][5] > dur_to_next:
-                di_min[ch][5] dur_to_next 
+                di_min[ch][5] = dur_to_next 
 
             post_ratio = di_author[ch][au][0]/len(di_stemmed[ch])
         
@@ -459,19 +457,58 @@ for i in range(1,len(di_stemmed[ch])-1))/(len(di_stemmed[ch])-1)
             cur.execute('UPDATE assessedPosts SET overlapChannel=%s, comparedFrequency=%s, durationToPrevious=%s,\
 durationToNext=%s, authorPostingRatio=%s, authorPositiveRatio=%s, authorNegativeRatio=%s WHERE post_id=%s', (channel_over, comp_freq,\
 dur_to_prev, dur_to_next, post_ratio, pos_ratio, neg_ratio, di_stemmed[ch][j][0]))
-            con.commit()
+        con.commit()
+        #normalize features of ALL posts in a channel
+        cur.execute('SELECT * FROM assessedPosts WHERE ch_id=%s', (ch,))
+        for row in cur:
+            n_tc = n_vtc = n_dist_over = n_cluster_size = n_dur_to_prev = n_dur_to_next = n_create_dur = n_dur_per_w = n_hold_back = 0
+            if di_max[ch][0]>0:
+                n_tc = (row[2] - di_min[ch][0])/di_max[ch][0]
+            if di_max[ch][1]>0:
+                n_vtc = (row[4] - di_min[ch][1])/di_max[ch][1]
+            if di_max[ch][2]>0:
+                n_dist_over = (row[10] - di_min[ch][2])/di_max[ch][2]
+            if di_max[ch][3]>0:
+                print('debug')
+                n_cluster_size = (row[13] - di_min[ch][3])/di_max[ch][3]
+            if di_max[ch][4]>0:
+                n_dur_to_prev  = (row[16] - di_min[ch][4])/di_max[ch][4]
+            if di_max[ch][5]>0:
+                n_dur_to_next = (row[18] - di_min[ch][5])/di_max[ch][5]
+            if di_max[ch][6]>0:
+                n_create_dur = (row[20] - di_min[ch][6])/di_max[ch][6]
+            if di_max[ch][7]>0:
+                n_dur_per_w = (row[22] - di_min[ch][7])/di_max[ch][7]
+            if di_max[ch][8]>0:
+                n_hold_back = (row[24] - di_min[ch][8])/di_max[ch][8]
+            cur.execute('UPDATE assessedPosts SET n_tokenCount=%s, n_validTokenCount=%s, n_overlapDistance=%s,\
+n_clusterSize=%s, n_durationToPrevious=%s, n_durationToNext=%s, n_creationDuration=%s,n_durationPerWord=%s, n_holdBackDuration=%s WHERE post_id=%s',\
+(n_tc, n_vtc, n_dist_over, n_cluster_size, n_dur_to_prev, n_dur_to_next, n_create_dur, n_dur_per_w, n_hold_back, row[0]))
+        con.commit()
 
-        
-        
+        #save all statistics for later use   
         if cur.execute('SELECT * FROM channelStatistics WHERE ch_id=%s', ch):
-            cur.execute('UPDATE channelStatistics SET maxTokenCount=%s, minTokenCount=%s, maxValidTokenCount=%s,\
-minValidTokenCount=%s,stemmedPosts=%s, stemmedList=%s, authorDict=%s clusterDict=%s WHERE ch_id=%s',(di_max_tc[ch], di_min_tc[ch],\
-di_max_vtc[ch], di_min_vtc[ch],pickle.dumps(di_stemmed[ch]), pickle.dumps(di_channel[ch]),pickle.dumps(di_author[ch]),\
+            cur.execute('UPDATE channelStatistics SET tokenCountMin=%s, tokenCountMax=%s, valdiTokenCountMin=%s, validTokenCountMax=%s,\
+overlapDistanceMin=%s ,overlapDistanceMax=%s , clusterSizeMin=%s , clusterSizeMax=%s ,\
+durationToPreviousMin=%s, durationToPreviousMax=%s ,durationToNextMin=%s , durationToNextMax=%s,\
+creationDurationMin=%s , creationDurationMax=%s, holdBackDurationMin=%s ,\
+holdBackDurationMax=%s, stemmedPosts=%s, stemmedList=%s, authorDict=%s clusterDict=%s WHERE ch_id=%s',\
+(di_min[ch][0], di_max[ch][0],\
+di_min[ch][1], di_max[ch][1], di_min[ch][2], di_max[ch][2],\
+di_min[ch][3],di_max[ch][3], di_min[ch][4], di_max[ch][4],\
+di_min[ch][5],di_max[ch][5],di_min[ch][6],di_max[ch][6],\
+di_min[ch][7],di_max[ch][7],\
+pickle.dumps(di_stemmed[ch]), pickle.dumps(di_channel[ch]),pickle.dumps(di_author[ch]),\
 pickle.dumps(di_cluster[ch]), ch))
         else:
-            cur.execute('INSERT INTO channelStatistics VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)',(ch, di_max_tc[ch],\
-di_min_tc[ch], di_max_vtc[ch], di_min_vtc[ch],pickle.dumps(di_stemmed[ch]), pickle.dumps(di_channel[ch]),\
-pickle.dumps(di_author[ch]),pickle.dumps(di_cluster[ch])))
+            cur.execute('INSERT INTO channelStatistics VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
+(ch,di_min[ch][0], di_max[ch][0],\
+di_min[ch][1], di_max[ch][1], di_min[ch][2], di_max[ch][2],\
+di_min[ch][3],di_max[ch][3], di_min[ch][4], di_max[ch][4],\
+di_min[ch][5],di_max[ch][5],di_min[ch][6],di_max[ch][6],\
+di_min[ch][7],di_max[ch][7],\
+pickle.dumps(di_stemmed[ch]), pickle.dumps(di_channel[ch]),pickle.dumps(di_author[ch]),\
+pickle.dumps(di_cluster[ch])))
         con.commit()
 
     con.close()
