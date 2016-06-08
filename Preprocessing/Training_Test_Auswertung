@@ -1,0 +1,87 @@
+Tokens/valid/stemmed:
+
+1) 	['Evidenzbasiert', 'Feststellungen', 'als', 'Entscheidungshilfe', 'in', 'der', 'klinischen', 'Praxis']
+	['Evidenzbasiert', 'Feststellungen', 'Entscheidungshilfe', 'klinischen', 'Praxis']
+	['evidenzbasiert', 'feststell', 'entscheidungshilf', 'klinisch', 'praxis']
+
+2) 	['Leitlinien-', 'Wer', 'macht', 'sie', '?', 'Jeder', 'kann', 'eine', 'Leitlinie', 'machen', ',', 'kein', 'geschützer', 'Begriff', '=', '>', 'Nutzer', 'muss', 'Qualität', 'prüfen', ',', 'und', 'ob', 'es', 'verantwortlich', 'ist', ',', 'sie', 'anzuwenden']
+	['Leitlinien-', 'Wer', 'macht', 'Jeder', 'Leitlinie', 'geschützer', 'Begriff', 'Nutzer', 'Qualität', 'prüfen', 'verantwortlich', 'anzuwenden']
+	['leitlinien-', 'wer', 'macht', 'jed', 'leitlini', 'geschutz', 'begriff', 'nutz', 'qualitat', 'pruf', 'verantwort', 'anzuw']
+
+3) 	['Jeder', 'kann', 'Leitlinien', 'erstellen', ':', 'Qualitätssicherung', 'selber', 'durchführen']
+	['Jeder', 'Leitlinien', 'erstellen', 'Qualitätssicherung', 'selber', 'durchführen']
+	['jed', 'leitlini', 'erstell', 'qualitatssicher', 'selb', 'durchfuhr']
+
+4) 	['Nicht', 'jede', 'existierende', 'Leitlinie', 'muss', 'auf', 'jeden', 'klinischen', 'Fall', 'passen', '.']
+	['Nicht', 'existierende', 'Leitlinie', 'klinischen', 'Fall', 'passen']
+	['nicht', 'existier', 'leitlini', 'klinisch', 'fall', 'pass']
+
+
+5) 	['Prädiktive', 'WErte', 'für', 'Patienten', 'das', 'iteressante', ':', 'Der', 'Pat', '.', 'will', 'wissen', ',', 'ob', 'er', 'krank', 'ist']
+	['Prädiktive', 'WErte', 'Patienten', 'iteressante', 'Der', 'Pat', 'wissen', 'krank']
+	['pradiktiv', 'wert', 'patient', 'iteressant', 'der', 'pat', 'wiss', 'krank']
+
+6) 	['Patienten', 'interessiert', 'den', 'positiven', 'prädikativer', 'Wert']
+	['Patienten', 'interessiert', 'positiven', 'prädikativer', 'Wert']
+	['patient', 'interessiert', 'positiv', 'pradikativ', 'wert']
+
+
+7) 	['das', 'heisst', ':', 'wie', 'wahrscheinlich', 'es', 'ist', ',', 'dass', 'er', 'krank', 'ist', '.']
+	['heisst', 'wahrscheinlich', 'dass', 'krank']
+	['heisst', 'wahrschein', 'dass', 'krank']
+
+8) 	['CAVE', ':', 'Bei', 'Krankheiten', 'mit', 'niedriger', 'Prävalenz', 'sind', 'Tests', 'nicht', 'zuverlässig']
+	['CAVE', 'Bei', 'Krankheiten', 'niedriger', 'Prävalenz', 'Tests', 'zuverlässig']
+	['cav', 'bei', 'krankheit', 'niedrig', 'pravalenz', 'test', 'zuverlass']
+
+TokenCount/valid (normalized) = non-stopwordRatio:
+
+	1) 8/5 (0.08696/0.125)
+	2) 29/12 (1/1)
+	3) 8/6 (0.08696/0.25)
+	4) 11/6 (0.217/0.25)
+	5) 17/8 (0.4782/0.5)
+	6) 6/5 (0/0.125)
+	7) 13/4 (0.3043/0)
+	8) 11/7 (0.2173/0.375)
+
+disnstinctWordRatio:
+	
+	alle) 1 
+
+OverlapPrevious - distance (normalized):
+
+	1) 0 - 0 (0)
+	2) 0 - 1 (0.33)
+	3) 2/12 - 1 (0.33)
+	4) 1/5 - 3 (1)
+	5) 0 - 1 (0.33)
+	6) 2/8 - 1 (0.33)
+	7) 1/8 - 2 (0.66)
+	8) 0 - 1 (0)
+
+cluster:
+	nur [5,6] clusterSize: 	5) 2 (normalized 1)
+				6) 2 (normalized 1)
+	
+	overlapCluster:		1) 1
+				2) 1
+				3) 1
+				4) 1
+				5) 3/10
+				6) 3/10
+				7) 1
+				8) 1
+				
+
+durationToprevious:	
+	1) 0	
+	2) 41
+	3) 28
+	4) 170
+	5) 4315
+	6) 8
+	7) 17
+	8) 27
+	
+
