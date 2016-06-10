@@ -1,6 +1,5 @@
 #@TODO: AuthorIsChannelOwner is missing (no data available)
-#what about normalizing
-#prevent double assessment of same posts
+#time_features according to submit or insert
 #needs database "wescript" for 'sven'@localhost with passwrd='nevs'
 import nltk
 import re
@@ -65,13 +64,12 @@ postingTypeEquation BOOLEAN, imageIsHandmade BOOLEAN, punctuationLevel FLOAT,\
 endsWithQuestionmark BOOLEAN, containsLinebreak BOOLEAN, containsSlideReference BOOLEAN,\
 containsSmiley BOOLEAN, beginsWithAlphanumeric BOOLEAN, containsScriptTags BOOLEAN,\
 authorPostingRatio DOUBLE, authorPositiveRatio DOUBLE, authorNegativeRatio DOUBLE,\
-authorIsChannelOwner BOOLEAN)')
+authorIsChannelOwner BOOLEAN, quality DOUBLE)')
+
     cur.execute('CREATE TABLE IF NOT EXISTS channelStatistics (ch_id INT PRIMARY KEY,\
 tokenCountMin DOUBLE, tokenCountMax DOUBLE, valdiTokenCountMin DOUBLE, validTokenCountMax DOUBLE,\
-overlapDistanceMin DOUBLE,overlapDistanceMax DOUBLE, clusterSizeMin DOUBLE, clusterSizeMax DOUBLE,\
-durationToPreviousMin DOUBLE, durationToPreviousMax DOUBLE,durationToNextMin DOUBLE, durationToNextMax DOUBLE,\
-creationDurationMin DOUBLE, creationDurationMax DOUBLE, holdBackDurationMin DOUBLE,\
-holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB, clusterDict BLOB)')
+creationDurationMin DOUBLE, creationDurationMax DOUBLE, durationPerWordMin DOUBLE, durationPerWordMax DOUBLE,\
+holdBackDurationMin DOUBLE,holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB)')
 
     di_max = dict() 
     di_min = dict()
@@ -108,24 +106,18 @@ holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
         #get min/max for normalizaion
         if cur.execute('SELECT * FROM channelStatistics WHERE ch_id=%s', (channel,)):
                 fetch = cur.fetchone()
-                di_min[channel][0] = fetch[0]
-                di_max[channel][0] = fetch[1]
-                di_min[channel][1] = fetch[2]
-                di_max[channel][1] = fetch[3]
-                di_min[channel][2] = fetch[4]
-                di_max[channel][2] = fetch[5]
-                di_min[channel][3] = fetch[6]
-                di_max[channel][3] = fetch[7]
-                di_min[channel][4] = fetch[8]
-                di_max[channel][4] = fetch[9]
-                di_min[channel][5] = fetch[10]
-                di_max[channel][5] = fetch[11]
-                di_min[channel][6] = fetch[12]
-                di_max[channel][6] = fetch[13]
-                di_min[channel][7] = fetch[14]
-                di_max[channel][7] = fetch[15]
-                di_min[channel][8] = fetch[16]
-                di_max[channel][8] = fetch[17]
+                di_min = {channel: [fetch[1]]}
+                di_max = {channel: [fetch[2]]}
+                di_min[channel].append(fetch[3])
+                di_max[channel].append(fetch[4])
+                di_min[channel].append(fetch[5])
+                di_max[channel].append(fetch[6])
+                di_min[channel].append(fetch[7])
+                di_max[channel].append(fetch[8])
+                di_min[channel].append(fetch[9])
+                di_max[channel].append(fetch[10])
+                di_min[channel] = di_min[channel] + [None, None, None, None]
+                di_max[channel] = di_max[channel] + [0, 0, 0, 0]
         #total author values
         for au in di_author[channel]:
             total = len(di_author[channel][au])
@@ -147,17 +139,15 @@ holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
                     di_author[channel].update({au:temp_author[au]})
                 else:
                     di_author[channel][au][0] += temp_author[au][0]
-                    di_author[channel][au][0] += temp_author[au][1]
-                    di_author[channel][au][0] += temp_author[au][2]           
+                    di_author[channel][au][1] += temp_author[au][1]
+                    di_author[channel][au][2] += temp_author[au][2]       
     #init of di_stemmed, di_cluster, punctuation-regex
     for channel in di_channel.keys():
-        if cur.execute('SELECT stemmedPosts, clusterDict FROM channelStatistics WHERE ch_id=%s', (channel,)):
+        if cur.execute('SELECT stemmedPosts FROM channelStatistics WHERE ch_id=%s', (channel,)):
             fetch = cur.fetchone()
             di_stemmed[channel] = pickle.loads(fetch[0])
-            di_cluster[channel] = pickle.loads(fetch[1])
         else:
             di_stemmed[channel] = list()
-            di_cluster[channel] = list()
             
     reg_punct = re.compile(r'\W')
     reg_end = re.compile(r'[\!\?\.]')
@@ -168,7 +158,7 @@ holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
     reg_script = re.compile(r'<\s*script[\s/>]')
     reg_alpha = re.compile(r'\w')
 
-    li.sort(key = lambda x: x[8]) #sort by inserttime
+    li.sort(key = lambda x: x[8]) #sort by inserttime or submittime
     #iterates over all posts and extracts their features
     for i, post in enumerate(li):
         #get set of valid tagged words per post
@@ -176,7 +166,6 @@ holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
         p_id = int(post[0]) 
         ch = int(post[1])
         au = int(post[2])
-        time_inter = 0 #the current time key is somewhere between old time keys
         current_time = dparser.parse(post[8])
         sent = post[3] #text without metadata
         tagged = tagging(sent)
@@ -203,105 +192,7 @@ holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
                     break
         else:
             di_stemmed[ch].append([p_id, current_time, set_stemmed, au])
-        #find posting with max overlap and the distance to it
-        max_over = [0, None]
-        for j, s in enumerate(di_stemmed[ch][:fin]):
-            if len(s[2])>0:
-                current_over = len(s[2]&set_stemmed)/len(s[2])
-            else:
-                current_over = 0
-            if max_over[0] <= current_over:
-                max_over[0] = current_over
-                max_over[1] = j
-        if max_over[1] is not None:
-            dist_over = fin-max_over[1]
-        else:
-            dist_over = 0
-        #if set is inserted somewhere inbetween, compute overlap again for all following
-        if fin < len(di_stemmed[ch])-1:
-            for j, s in enumerate(di_stemmed[ch][fin+1:]):
-                max_over = [0, None]
-                for k, t in enumerate(di_stemmed[ch][:fin+1+j]):
-                    if len(t[2]):
-                        current_over = len(t[2]&s[2])/len(t[2])
-                    else:
-                        current_over = 0
-                    if max_over[0] <= current_over:
-                        max_over[0] = current_over
-                        max_over[1] = k
-                cur.execute('UPDATE assessedPosts SET overlapPrevious=%s, overlapDistance=%s WHERE post_id=%s'\
-, (max_over[0], fin+1+j-max_over[1], s[0]))
-                    
-        #make clusters
-##        cluster_over = 1
-##        cluster_size = 1
-##        di_cluster[ch] = list()
-##        for j,s in enumerate(di_stemmed[ch]):
-##            cluster_size = 1
-##            li_cluster = di_cluster[ch]
-##            max_sim = [-1, 0]
-##            if not li_cluster:
-##                li_cluster.append([s[1],s[2]])
-##            else:
-##                for index, cluster in enumerate(li_cluster):
-##                    if (s[1]-cluster[0]).total_seconds() <= 300:
-##                        for st in cluster[1:]:
-##                            sim = 0 
-##                            if len(s[2]) > 0 and len(st) > 0:
-##                                sim = len(s[2]&st)/min(len(st), len(s[2]))
-##                            if max_sim[1] <= sim and sim >=0.6:
-##                                max_sim[1] = sim
-##                                max_sim[0] = index
-##                if max_sim[0] != -1:
-##                    li_cluster[max_sim[0]][0] = s[1]
-##                    li_cluster[max_sim[0]].append(s[2])
-##                    cluster_size = len(li_cluster[max_sim[0]])-1 #normalizing with min/max cluster size
-##                else:
-##                    li_cluster.append([s[1], s[2]])
-##                    cluster_size = 1    
-##
-##            cluster_over = 0
-##            if len(set.union(*li_cluster[max_sim[0]][1:])) > 0:
-##                cluster_over = len(s[2]&(set.union(*li_cluster[max_sim[0]][1:])))/\
-##len(set.union(*li_cluster[max_sim[0]][1:]))
-##                
-##            if cur.execute('SELECT * FROM assessedPosts WHERE post_id=%s',(s[0],)):
-##                cur.execute('UPDATE assessedPosts SET clusterSize=%s, overlapCluster=%s WHERE post_id=%s', (cluster_size, cluster_over,s[0]))
-##            else:
-##                cur.execute('INSERT INTO assessedPosts (clusterSize, overlapCluster) VALUES (%s, %s)', (cluster_size, cluster_over))
-##        #no time break
-##        else:                            
-##            li_cluster = di_cluster[ch]
-##            max_sim = [-1, 0]
-##            if not li_cluster:
-##                li_cluster.append([current_time, set_stemmed])
-##            else:
-##                for index, cluster in enumerate(li_cluster):
-##                    if (current_time-cluster[0]).total_seconds() <= 300:
-##                        print('smaller 300')
-##                        for st in cluster[1:]:
-##                            sim = 0
-##                            print(st)
-##                            print(set_stemmed)
-##                            if len(set_stemmed) > 0 and len(st) > 0:
-##                                sim = len(set_stemmed&st)/min(len(st), len(set_stemmed))
-##                            if max_sim[1] <= sim and sim >=0.6:
-##                                max_sim[1] = sim
-##                                max_sim[0] = index
-##                if max_sim[0] != -1:
-##                    li_cluster[max_sim[0]][0] = current_time
-##                    li_cluster[max_sim[0]].append(set_stemmed)
-##                    cluster_size = len(li_cluster[max_sim[0]])-1 #normalizing with min/max cluster size
-##                    print(cluster_size)
-##                else:
-##                    li_cluster.append([current_time, set_stemmed])
-##                    cluster_size = 1    
-##
-##            
-##            if max_sim[0] != -1 and len(set.union(*li_cluster[max_sim[0]][1:])) > 0:
-##               cluster_over = len(set_stemmed&(set.union(*li_cluster[max_sim[0]][1:])))/\
-##len(set.union(*li_cluster[max_sim[0]][1:]))
-                       
+                     
 
         #calculate time features        
         create_dur = (dparser.parse(post[6])-dparser.parse(post[5])).total_seconds()  #normalizing with min/max 
@@ -367,44 +258,29 @@ holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB
                 di_max[ch][1] = vtc
             if di_min[ch][1] > vtc:
                 di_min[ch][1] = vtc
-            if di_max[ch][2] < dist_over:
-                di_max[ch][2] = dist_over
-            if di_min[ch][2] > dist_over:
-                di_min[ch][2] = dist_over
-            if di_max[ch][6] < create_dur:
-                di_max[ch][6] = create_dur
-            if di_min[ch][6] > create_dur:
-                di_min[ch][6] = create_dur
-            if di_max[ch][7] < dur_per_w:
-                di_max[ch][7] = dur_per_w
-            if di_min[ch][7] > dur_per_w:
-                di_min[ch][7] = dur_per_w
-            if di_max[ch][8] < hold_back:
-                di_max[ch][8] = hold_back
-            if di_min[ch][8] > hold_back:
-                di_min[ch][8] = hold_back
+            if di_max[ch][2] < create_dur:
+                di_max[ch][2] = create_dur
+            if di_min[ch][2] > create_dur:
+                di_min[ch][2] = create_dur
+            if di_max[ch][3] < dur_per_w:
+                di_max[ch][3] = dur_per_w
+            if di_min[ch][3] > dur_per_w:
+                di_min[ch][3] = dur_per_w
+            if di_max[ch][4] < hold_back:
+                di_max[ch][4] = hold_back
+            if di_min[ch][4] > hold_back:
+                di_min[ch][4] = hold_back
         else:
-            di_max[ch]=[tc, vtc,dist_over, 0,0,0,create_dur,dur_per_w, hold_back]
-            di_min[ch]=[tc, vtc,dist_over, None,0,0,create_dur,dur_per_w, hold_back]#0 for dur to prev can be used as first one will always have 0
-                
+            di_max[ch]=[tc, vtc,create_dur,dur_per_w, hold_back, 0, 0, 0, 0]
+            di_min[ch]=[tc, vtc,create_dur,dur_per_w, hold_back, None, None, None, None]
 
-        if cur.execute('SELECT * FROM assessedPosts WHERE post_id = %s', p_id):
-            cur.execute('UPDATE assessedPosts SET tokenCount=%s, validTokenCount=%s,nonStopwordRatio=%s,\
-distinctWordRatio=%s, overlapPrevious=%s, overlapDistance=%s,\
-creationDuration=%s, durationPerWord=%s,\
-holdBackDuration=%s, postingTypeText=%s, postingTypeImage=%s,\
-postingTypeEquation=%s, imageIsHandmade=%s, punctuationLevel=%s,\
-endsWithQuestionmark=%s, containsLinebreak=%s, containsSlideReference=%s,\
-containsSmiley=%s, beginsWithAlphanumeric=%s, containsScriptTags=%s WHERE post_id=%s',\
-(tc, vtc, non_stop, dist_ratio, max_over[0], dist_over,create_dur, dur_per_w, hold_back, post_type_t,\
-post_type_i, post_type_e, is_handmade, punct, ends_with_quest,line_break, slide_ref, smiley, alpha, script_tag, p_id))
-        else:
-            cur.execute('INSERT INTO assessedPosts VALUES\
-(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
-(p_id,ch, tc, 0, vtc, 0, non_stop, dist_ratio, max_over[0], dist_over,0,0, 0, 0, 0,0, 0, 0, 0, 0,\
+        cur.execute('INSERT INTO assessedPosts VALUES\
+(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
+(p_id,ch, tc, 0, vtc, 0, non_stop, dist_ratio, 0, 0,0,0, 0, 0, 0,0, 0, 0, 0, 0,\
 create_dur, 0, dur_per_w, 0, hold_back, 0, post_type_t, post_type_i, post_type_e,is_handmade, punct, ends_with_quest,\
-line_break, slide_ref, smiley, alpha, script_tag,0,0,0,0))            
-        con.commit()#maybe only one indent 
+line_break, slide_ref, smiley, alpha, script_tag,0,0,0,0,post[-1]))            
+        con.commit()#maybe only one indent
+
     #calculate featues for which overall knowledge is needed
     cur2 = con.cursor()
     for ch in di_channel:
@@ -422,6 +298,25 @@ for i in range(1,len(di_stemmed[ch])))/(len(di_stemmed[ch])-1)
         di_cluster[ch] = list()
         li_cluster = di_cluster[ch]
         for j, st in enumerate(di_stemmed[ch]):
+            max_over = [0, None]
+            for i, s in enumerate(di_stemmed[ch][:j]):
+                if len(s[2])>0:
+                    current_over = len(s[2]&st[2])/len(s[2])
+                else:
+                    current_over = 0
+                if max_over[0] <= current_over:
+                    max_over[0] = current_over
+                    max_over[1] = i
+            if max_over[1] is not None:
+                dist_over = j - max_over[1]
+            else:
+                dist_over = 0
+
+            if di_max[ch][8] < dist_over:
+                di_max[ch][8] = dist_over
+            if di_min[ch][8] is None or di_min[ch][8] > dist_over:
+                di_min[ch][8] = dist_over
+                
             max_sim = [-1, 0]
             if not li_cluster:
                 li_cluster.append([st[1],[st[0],st[2]]])
@@ -430,7 +325,7 @@ for i in range(1,len(di_stemmed[ch])))/(len(di_stemmed[ch])-1)
                     if (st[1]-cluster[0]).total_seconds() <= 300:
                         for stemmed in cluster[1:]:
                             sim = 0 
-                            if len(st[2]) > 0 and len(st) > 0:
+                            if len(st[2]) > 0 and len(stemmed[1]) > 0:
                                 sim = len(st[2]&stemmed[1])/min(len(stemmed[1]), len(st[2]))
                             if max_sim[1] <= sim and sim >=0.6:
                                 max_sim[1] = sim
@@ -439,7 +334,7 @@ for i in range(1,len(di_stemmed[ch])))/(len(di_stemmed[ch])-1)
                     li_cluster[max_sim[0]][0] = st[1]
                     li_cluster[max_sim[0]].append([st[0], st[2]])
                 else:
-                    li_cluster.append([s[1], [st[0],st[2]]])
+                    li_cluster.append([st[1], [st[0],st[2]]])
             
             au = st[3]
             channel_over = len(st[2]&top10_channel)/len(top10_channel)
@@ -452,15 +347,15 @@ for i in range(1,len(di_stemmed[ch])))/(len(di_stemmed[ch])-1)
             dur_to_next = 0   
             if j < len(di_stemmed[ch])-1:
                 dur_to_next = (di_stemmed[ch][j+1][1] - di_stemmed[ch][j][1]).total_seconds()
-
-            if di_max[ch][4] < dur_to_prev:
-                di_max[ch][4] = dur_to_prev
-            if di_min[ch][4] > dur_to_prev:
-                di_min[ch][4] = dur_to_prev
-            if di_max[ch][5] < dur_to_next:
-                di_max[ch][5] = dur_to_next
-            if di_min[ch][5] > dur_to_next:
-                di_min[ch][5] = dur_to_next 
+           
+            if di_max[ch][5] < dur_to_prev:
+                di_max[ch][5] = dur_to_prev
+            if di_min[ch][5] is None or di_min[ch][5] > dur_to_prev:
+                di_min[ch][5] = dur_to_prev
+            if di_max[ch][6] < dur_to_next:
+                di_max[ch][6] = dur_to_next
+            if di_min[ch][6] is None or di_min[ch][6] > dur_to_next:
+                di_min[ch][6] = dur_to_next 
 
             post_ratio = di_author[ch][au][0]/len(di_stemmed[ch])
         
@@ -468,21 +363,25 @@ for i in range(1,len(di_stemmed[ch])))/(len(di_stemmed[ch])-1)
         
             neg_ratio = di_author[ch][au][2]/di_author[ch][au][0]
 
-            cur.execute('UPDATE assessedPosts SET overlapChannel=%s, comparedFrequency=%s, durationToPrevious=%s,\
-durationToNext=%s, authorPostingRatio=%s, authorPositiveRatio=%s, authorNegativeRatio=%s WHERE post_id=%s', (channel_over, comp_freq,\
-dur_to_prev, dur_to_next, post_ratio, pos_ratio, neg_ratio, st[0]))
+            cur.execute('UPDATE assessedPosts SET overlapPrevious=%s, overlapDistance=%s, overlapChannel=%s, comparedFrequency=%s, durationToPrevious=%s,\
+durationToNext=%s, authorPostingRatio=%s, authorPositiveRatio=%s, authorNegativeRatio=%s WHERE post_id=%s',\
+(max_over[0], dist_over, channel_over, comp_freq, dur_to_prev, dur_to_next, post_ratio, pos_ratio, neg_ratio, st[0]))
         con.commit()
 
         #get clustersize/clusterOverlap
         for index, cluster in enumerate(li_cluster):
             cluster_size = len(cluster)-1
-            if di_max[ch][3] < cluster_size:
-                di_max[ch][3] = cluster_size
-            if di_min[ch][3] is None or di_min[ch][3] > cluster_size:
-                di_min[ch][3] = cluster_size
+            if cluster_size == 0:
+                print(cluster)
+            if di_max[ch][7] < cluster_size:
+                di_max[ch][7] = cluster_size
+            if di_min[ch][7] is None or di_min[ch][7] > cluster_size:
+                di_min[ch][7] = cluster_size
             cluster_set = set.union(*[st[1] for st in cluster[1:]])
             for st in cluster[1:]:
-                cluster_over = len(st[1]&cluster_set)/len(cluster_set)
+                cluster_over = 1
+                if len(cluster_set) > 0:
+                    cluster_over = len(st[1]&cluster_set)/len(cluster_set)
                 cur.execute('UPDATE assessedPosts SET clusterSize=%s, overlapCluster=%s WHERE post_id=%s',\
 (cluster_size, cluster_over, st[0]))
         con.commit()
@@ -490,27 +389,28 @@ dur_to_prev, dur_to_next, post_ratio, pos_ratio, neg_ratio, st[0]))
         cur.execute('SELECT * FROM assessedPosts WHERE ch_id=%s', (ch,))
         for row in cur:
             n_tc = n_vtc = n_dist_over = n_cluster_size = n_dur_to_prev = n_dur_to_next = n_create_dur = n_dur_per_w = n_hold_back = 0
-            if (di_max[ch][0]- di_min[ch][0])>0:
+            if (di_max[ch][0] - di_min[ch][0])>0:
                 n_tc = (row[2] - di_min[ch][0])/(di_max[ch][0]- di_min[ch][0])
             if (di_max[ch][1] - di_min[ch][1])>0:
                 n_vtc = (row[4] - di_min[ch][1])/(di_max[ch][1] - di_min[ch][1])
             if (di_max[ch][2] - di_min[ch][2])>0:
-                n_dist_over = (row[9] - di_min[ch][2])/(di_max[ch][2] - di_min[ch][2])
+                n_create_dur = (row[20] - di_min[ch][2])/(di_max[ch][2] - di_min[ch][2])   
             if (di_max[ch][3] - di_min[ch][3])>0:
-                n_cluster_size = (row[12] - di_min[ch][3])/(di_max[ch][3] - di_min[ch][3])
-            if (di_max[ch][4] - di_min[ch][4])>0:
-                n_dur_to_prev  = (row[15] - di_min[ch][4])/(di_max[ch][4] - di_min[ch][4])
-            if (di_max[ch][5] - di_min[ch][5])>0:
-                n_dur_to_next = (row[18] - di_min[ch][5])/(di_max[ch][5] - di_min[ch][5])
-            if (di_max[ch][6] - di_min[ch][6])>0:
-                n_create_dur = (row[20] - di_min[ch][6])/(di_max[ch][6] - di_min[ch][6])
-            if (di_max[ch][7] - di_min[ch][7])>0:
-                n_dur_per_w = (row[22] - di_min[ch][7])/(di_max[ch][7] - di_min[ch][7])
+                n_dur_per_w = (row[22] - di_min[ch][3])/(di_max[ch][3] - di_min[ch][3])
                 # numeric problem with floating// as duration per word is already a ratio
                 if abs(n_dur_per_w) < 0.00000000001:
-                    n_dur_per_w = 0 
+                    n_dur_per_w = 0   
+            if (di_max[ch][4] - di_min[ch][4])>0:
+                n_hold_back = (row[24] - di_min[ch][4])/(di_max[ch][4] - di_min[ch][4]) 
+            if (di_max[ch][5] - di_min[ch][5])>0:
+                n_dur_to_prev  = (row[15] - di_min[ch][5])/(di_max[ch][5] - di_min[ch][5])
+            if (di_max[ch][6] - di_min[ch][6])>0:
+                n_dur_to_next = (row[18] - di_min[ch][6])/(di_max[ch][6] - di_min[ch][6])
+            if (di_max[ch][7] - di_min[ch][7])>0:
+                n_cluster_size = (row[12] - di_min[ch][7])/(di_max[ch][7] - di_min[ch][7])
             if (di_max[ch][8] - di_min[ch][8])>0:
-                n_hold_back = (row[24] - di_min[ch][8])/(di_max[ch][8] - di_min[ch][8])
+                n_dist_over = (row[9] - di_min[ch][8])/(di_max[ch][8] - di_min[ch][8])
+                
             cur2.execute('UPDATE assessedPosts SET n_tokenCount=%s, n_validTokenCount=%s, n_overlapDistance=%s,\
 n_clusterSize=%s, n_durationToPrevious=%s, n_durationToNext=%s, n_creationDuration=%s,n_durationPerWord=%s, n_holdBackDuration=%s WHERE post_id=%s',\
 (n_tc, n_vtc, n_dist_over, n_cluster_size, n_dur_to_prev, n_dur_to_next, n_create_dur, n_dur_per_w, n_hold_back, row[0]))
@@ -519,37 +419,43 @@ n_clusterSize=%s, n_durationToPrevious=%s, n_durationToNext=%s, n_creationDurati
         #save all statistics for later use   
         if cur.execute('SELECT * FROM channelStatistics WHERE ch_id=%s', ch):
             cur.execute('UPDATE channelStatistics SET tokenCountMin=%s, tokenCountMax=%s, valdiTokenCountMin=%s, validTokenCountMax=%s,\
-overlapDistanceMin=%s ,overlapDistanceMax=%s , clusterSizeMin=%s , clusterSizeMax=%s ,\
-durationToPreviousMin=%s, durationToPreviousMax=%s ,durationToNextMin=%s , durationToNextMax=%s,\
-creationDurationMin=%s , creationDurationMax=%s, holdBackDurationMin=%s ,\
-holdBackDurationMax=%s, stemmedPosts=%s, stemmedList=%s, authorDict=%s clusterDict=%s WHERE ch_id=%s',\
+creationDurationMin=%s , creationDurationMax=%s,durationPerWordMin=%s, durationPerWordMax=%s,\
+holdBackDurationMin=%s, holdBackDurationMax=%s, stemmedPosts=%s, stemmedList=%s, authorDict=%s WHERE ch_id=%s',\
 (di_min[ch][0], di_max[ch][0],\
 di_min[ch][1], di_max[ch][1], di_min[ch][2], di_max[ch][2],\
 di_min[ch][3],di_max[ch][3], di_min[ch][4], di_max[ch][4],\
-di_min[ch][5],di_max[ch][5],di_min[ch][6],di_max[ch][6],\
-di_min[ch][7],di_max[ch][7],\
-pickle.dumps(di_stemmed[ch]), pickle.dumps(di_channel[ch]),pickle.dumps(di_author[ch]),\
-pickle.dumps(di_cluster[ch]), ch))
+pickle.dumps(di_stemmed[ch]), pickle.dumps(di_channel[ch]),pickle.dumps(di_author[ch]), ch))
         else:
-            cur.execute('INSERT INTO channelStatistics VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
+            cur.execute('INSERT INTO channelStatistics VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
 (ch,di_min[ch][0], di_max[ch][0],\
 di_min[ch][1], di_max[ch][1], di_min[ch][2], di_max[ch][2],\
 di_min[ch][3],di_max[ch][3], di_min[ch][4], di_max[ch][4],\
-di_min[ch][5],di_max[ch][5],di_min[ch][6],di_max[ch][6],\
-di_min[ch][7],di_max[ch][7],\
-pickle.dumps(di_stemmed[ch]), pickle.dumps(di_channel[ch]),pickle.dumps(di_author[ch]),\
-pickle.dumps(di_cluster[ch])))
+pickle.dumps(di_stemmed[ch]), pickle.dumps(di_channel[ch]),pickle.dumps(di_author[ch])))
         con.commit()
 
     con.close()
 
-def train_test(l , rate = 6/7): # 6/7 is the rate of the MNIST data
+def train_test(rate = 6/7): # 6/7 is the rate of the MNIST data
     random.seed(datetime.now())
-    l_copy = l[:]
-    random.shuffle(l_copy)
-    return (l_copy[0:round(rate*len(l_copy))], l_copy[round(rate*len(l_copy)):]) 
-    
-def next_batch(l, n = 100):
+    con = sql.connect (host = 'localhost', user = 'sven', passwd = 'nevs', db='wescript')
+    cur = con.cursor()
+    cur.execute('CREATE TABLE IF NOT EXISTS trainingPosts (post_id INT PRIMARY KEY, training BOOLEAN)')    
+    con.commit()
+    cur.execute('DELETE FROM trainingPosts')
+    con.commit()
+    cur.execute('SELECT post_id FROM assessedPosts')
+    c = list(cur)
+    random.shuffle(c)
+    training = c[:round(rate*len(c))]
+    test = c[round(rate*len(c)):]
+    for row in training:
+        cur.execute('INSERT INTO trainingPosts VALUES (%s, %s)',(row[0],0))
+    for row in test:
+        cur.execute('INSERT INTO trainingPosts VALUES (%s, %s)',(row[0],1))
+    con.commit()
+    con.close()
+                     
+def next_batch(n = 100):
     random.seed(datetime.now())
     if n=='all':
         rand = [random.choice(l) for i in range(len(l))]
@@ -562,10 +468,3 @@ def next_batch(l, n = 100):
         assess.append(int(li[-2])+1)
     assess = numpy.eye(3)[assess] # make one-hot-vector for every input in assess
     return (features, assess)
-
-def init():
-#delete after testing
-    li = listify_postings('Doepke.csv')
-    get_features(li)
-    train, test = train_test(li)
-    return (li, train, test)

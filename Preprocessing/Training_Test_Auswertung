@@ -21,9 +21,9 @@ Tokens/valid/stemmed:
 	['Prädiktive', 'WErte', 'Patienten', 'iteressante', 'Der', 'Pat', 'wissen', 'krank']
 	['pradiktiv', 'wert', 'patient', 'iteressant', 'der', 'pat', 'wiss', 'krank']
 
-6) 	['Patienten', 'interessiert', 'den', 'positiven', 'prädikativer', 'Wert']
-	['Patienten', 'interessiert', 'positiven', 'prädikativer', 'Wert']
-	['patient', 'interessiert', 'positiv', 'pradikativ', 'wert']
+6) 	['Patienten', 'interessiert', 'den', 'positiven', 'prädiktiver', 'Wert']
+	['Patienten', 'interessiert', 'positiven', 'prädiktiver', 'Wert']
+	['patient', 'interessiert', 'positiv', 'pradiktiv', 'wert']
 
 
 7) 	['das', 'heisst', ':', 'wie', 'wahrscheinlich', 'es', 'ist', ',', 'dass', 'er', 'krank', 'ist', '.']
@@ -56,9 +56,9 @@ OverlapPrevious - distance (normalized):
 	3) 2/12 - 1 (0.33)
 	4) 1/5 - 3 (1)
 	5) 0 - 1 (0.33)
-	6) 2/8 - 1 (0.33)
+	6) 3/8 - 1 (0.33)
 	7) 1/8 - 2 (0.66)
-	8) 0 - 1 (0)
+	8) 0 - 1 (0.33)
 
 cluster:
 	nur [5,6] clusterSize: 	5) 2 (normalized 1)
@@ -68,8 +68,8 @@ cluster:
 				2) 1
 				3) 1
 				4) 1
-				5) 3/10
-				6) 3/10
+				5) 8/10
+				6) 5/10
 				7) 1
 				8) 1
 				

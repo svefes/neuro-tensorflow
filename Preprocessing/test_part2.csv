@@ -1,0 +1,7 @@
+id,channel_id,posteruser_id,text,topicstructure_id,startwritetime,endwritetime,submittime,inserttime,quality,value,image_id,postingtype,equation,image_is_handmade,image_id,trainingsrating
+48,7,3,Evidenzbasiert Feststellungen als Entscheidungshilfe in der klinischen Praxis,16,2013-05-03 10:20:26,2013-05-03 10:20:58,2013-05-03 10:21:00,2013-05-03 10:22:02,0.19230769230769232,0,,TXT,NULL,,NULL,0
+49,7,10,"Leitlinien- Wer macht sie? Jeder kann eine Leitlinie machen, kein geschützer Begriff => Nutzer muss Qualität prüfen, und ob es verantwortlich ist, sie anzuwenden",16,2013-05-03 10:21:32,2013-05-03 10:22:18,2013-05-03 10:22:20,2013-05-03 10:22:43,0.4230769230769231,0,,TXT,NULL,,NULL,0
+50,7,9,Jeder kann Leitlinien erstellen: Qualitätssicherung selber durchführen,16,2013-05-03 10:21:08,2013-05-03 10:22:08,2013-05-03 10:22:10,2013-05-03 10:23:11,0.19230769230769232,0,,TXT,NULL,,NULL,0
+51,7,3,Nicht jede existierende Leitlinie muss auf jeden klinischen Fall passen.,16,2013-05-03 10:24:42,2013-05-03 10:24:54,2013-05-03 10:24:59,2013-05-03 10:26:01,0.19230769230769232,0,,TXT,NULL,,NULL,0
+136,7,10,CAVE: Bei Krankheiten mit niedriger Prävalenz sind Tests nicht zuverlässig,16,2013-05-03 11:37:57,2013-05-03 11:38:24,2013-05-03 11:38:25,2013-05-03 11:38:48,0.23076923076923075,0,,TXT,NULL,,NULL,0
+134,7,10,Patienten interessiert den positiven prädiktiver Wert,16,2013-05-03 11:37:28,2013-05-03 11:37:40,2013-05-03 11:37:41,2013-05-03 11:38:04,0.19230769230769232,0,,TXT,NULL,,NULL,0

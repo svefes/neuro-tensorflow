@@ -1,0 +1,4 @@
+id,channel_id,posteruser_id,text,topicstructure_id,startwritetime,endwritetime,submittime,inserttime,quality,value,image_id,postingtype,equation,image_is_handmade,image_id,trainingsrating
+50,7,9,Jeder kann Leitlinien erstellen: Qualitätssicherung selber durchführen,16,2013-05-03 10:21:08,2013-05-03 10:22:08,2013-05-03 10:22:10,2013-05-03 10:23:11,0.19230769230769232,0,,TXT,NULL,,NULL,0
+133,7,9,"Prädiktive WErte für Patienten das iteressante: Der Pat. will wissen, ob er krank ist",20,2013-05-03 11:36:30,2013-05-03 11:36:47,2013-05-03 11:36:55,2013-05-03 11:37:56,0.26923076923076933,0,,TXT,NULL,,NULL,0
+135,7,3,"das heisst: wie wahrscheinlich es ist, dass er krank ist.",20,2013-05-03 11:37:09,2013-05-03 11:37:19,2013-05-03 11:37:20,2013-05-03 11:38:21,0.15384615384615385,0,,TXT,NULL,,NULL,0
