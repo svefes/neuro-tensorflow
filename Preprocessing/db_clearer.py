@@ -49,28 +49,12 @@ def stemming(sent):
     gs = nltk.stem.snowball.GermanStemmer()
     return [gs.stem(w) for w in sent]
 
-def get_features(li):
+def get_features(path):
     #connect to db "wecsript" on localhost
     con = sql.connect (host = 'localhost', user = 'sven', passwd = 'nevs', db='wescript')
     cur = con.cursor()
-    cur.execute('CREATE TABLE IF NOT EXISTS assessedPosts (post_id INT PRIMARY KEY, ch_id INT,\
-tokenCount DOUBLE, n_tokenCount DOUBLE, validTokenCount DOUBLE, n_validTokenCount DOUBLE, nonStopwordRatio DOUBLE,\
-distinctWordRatio DOUBLE, overlapPrevious DOUBLE, overlapDistance DOUBLE, n_overlapDistance DOUBLE,\
-overlapChannel DOUBLE, clusterSize DOUBLE, n_clusterSize DOUBLE, overlapCluster DOUBLE, durationToPrevious DOUBLE,\
-n_durationToPrevious DOUBLE, comparedFrequency DOUBLE, durationToNext DOUBLE, n_durationToNext DOUBLE,\
-creationDuration DOUBLE, n_creationDuration DOUBLE, durationPerWord DOUBLE, n_durationPerWord DOUBLE,\
-holdBackDuration DOUBLE, n_holdBackDuration DOUBLE, postingTypeText BOOLEAN, postingTypeImage BOOLEAN,\
-postingTypeEquation BOOLEAN, imageIsHandmade BOOLEAN, punctuationLevel FLOAT,\
-endsWithQuestionmark BOOLEAN, containsLinebreak BOOLEAN, containsSlideReference BOOLEAN,\
-containsSmiley BOOLEAN, beginsWithAlphanumeric BOOLEAN, containsScriptTags BOOLEAN,\
-authorPostingRatio DOUBLE, authorPositiveRatio DOUBLE, authorNegativeRatio DOUBLE,\
-authorIsChannelOwner BOOLEAN, quality DOUBLE)')
-
-    cur.execute('CREATE TABLE IF NOT EXISTS channelStatistics (ch_id INT PRIMARY KEY,\
-tokenCountMin DOUBLE, tokenCountMax DOUBLE, valdiTokenCountMin DOUBLE, validTokenCountMax DOUBLE,\
-creationDurationMin DOUBLE, creationDurationMax DOUBLE, durationPerWordMin DOUBLE, durationPerWordMax DOUBLE,\
-holdBackDurationMin DOUBLE,holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB)')
-
+    li = listify_postings(path)
+    
     di_max = dict() 
     di_min = dict()
     
@@ -79,7 +63,11 @@ holdBackDurationMin DOUBLE,holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemme
     di_cluster = dict()
     top_channel = dict()
     di_author = dict() #channel --> list of author plus values
-    cur.execute('SELECT post_id FROM assessedPosts')
+    try:
+        cur.execute('SELECT post_id FROM featurePosts')
+    except:
+        con.close()
+        print('A problem occured while accessing the database. Have you initalized the module? [init(path)]')
     already_assessed = [l[0] for l in list(cur)]
     li = [x for x in li if int(x[0]) not in already_assessed]
     #1.)sort all valid stemmed words(value) acccording to their channel(key)
@@ -274,11 +262,14 @@ holdBackDurationMin DOUBLE,holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemme
             di_max[ch]=[tc, vtc,create_dur,dur_per_w, hold_back, 0, 0, 0, 0]
             di_min[ch]=[tc, vtc,create_dur,dur_per_w, hold_back, None, None, None, None]
 
-        cur.execute('INSERT INTO assessedPosts VALUES\
-(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
+        #add to posts which have to be assessed
+        cur.execute('INSERT INTO assessedPosts VALUES (%s,%s,%s)',(p_id,0,post[-1]))
+
+        cur.execute('INSERT INTO featurePosts VALUES\
+(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
 (p_id,ch, tc, 0, vtc, 0, non_stop, dist_ratio, 0, 0,0,0, 0, 0, 0,0, 0, 0, 0, 0,\
 create_dur, 0, dur_per_w, 0, hold_back, 0, post_type_t, post_type_i, post_type_e,is_handmade, punct, ends_with_quest,\
-line_break, slide_ref, smiley, alpha, script_tag,0,0,0,0,post[-1]))            
+line_break, slide_ref, smiley, alpha, script_tag,0,0,0,0))            
         con.commit()#maybe only one indent
 
     #calculate featues for which overall knowledge is needed
@@ -363,7 +354,7 @@ for i in range(1,len(di_stemmed[ch])))/(len(di_stemmed[ch])-1)
         
             neg_ratio = di_author[ch][au][2]/di_author[ch][au][0]
 
-            cur.execute('UPDATE assessedPosts SET overlapPrevious=%s, overlapDistance=%s, overlapChannel=%s, comparedFrequency=%s, durationToPrevious=%s,\
+            cur.execute('UPDATE featurePosts SET overlapPrevious=%s, overlapDistance=%s, overlapChannel=%s, comparedFrequency=%s, durationToPrevious=%s,\
 durationToNext=%s, authorPostingRatio=%s, authorPositiveRatio=%s, authorNegativeRatio=%s WHERE post_id=%s',\
 (max_over[0], dist_over, channel_over, comp_freq, dur_to_prev, dur_to_next, post_ratio, pos_ratio, neg_ratio, st[0]))
         con.commit()
@@ -382,11 +373,11 @@ durationToNext=%s, authorPostingRatio=%s, authorPositiveRatio=%s, authorNegative
                 cluster_over = 1
                 if len(cluster_set) > 0:
                     cluster_over = len(st[1]&cluster_set)/len(cluster_set)
-                cur.execute('UPDATE assessedPosts SET clusterSize=%s, overlapCluster=%s WHERE post_id=%s',\
+                cur.execute('UPDATE featurePosts SET clusterSize=%s, overlapCluster=%s WHERE post_id=%s',\
 (cluster_size, cluster_over, st[0]))
         con.commit()
         #normalize features of ALL posts in a channel
-        cur.execute('SELECT * FROM assessedPosts WHERE ch_id=%s', (ch,))
+        cur.execute('SELECT * FROM featurePosts WHERE ch_id=%s', (ch,))
         for row in cur:
             n_tc = n_vtc = n_dist_over = n_cluster_size = n_dur_to_prev = n_dur_to_next = n_create_dur = n_dur_per_w = n_hold_back = 0
             if (di_max[ch][0] - di_min[ch][0])>0:
@@ -411,9 +402,10 @@ durationToNext=%s, authorPostingRatio=%s, authorPositiveRatio=%s, authorNegative
             if (di_max[ch][8] - di_min[ch][8])>0:
                 n_dist_over = (row[9] - di_min[ch][8])/(di_max[ch][8] - di_min[ch][8])
                 
-            cur2.execute('UPDATE assessedPosts SET n_tokenCount=%s, n_validTokenCount=%s, n_overlapDistance=%s,\
+            cur2.execute('UPDATE featurePosts SET n_tokenCount=%s, n_validTokenCount=%s, n_overlapDistance=%s,\
 n_clusterSize=%s, n_durationToPrevious=%s, n_durationToNext=%s, n_creationDuration=%s,n_durationPerWord=%s, n_holdBackDuration=%s WHERE post_id=%s',\
 (n_tc, n_vtc, n_dist_over, n_cluster_size, n_dur_to_prev, n_dur_to_next, n_create_dur, n_dur_per_w, n_hold_back, row[0]))
+            cur2.execute('UPDATE assessedPosts SET assessed = 0 WHERE post_id=%s',(row[0],))
         con.commit()
 
         #save all statistics for later use   
@@ -435,36 +427,147 @@ pickle.dumps(di_stemmed[ch]), pickle.dumps(di_channel[ch]),pickle.dumps(di_autho
 
     con.close()
 
-def train_test(rate = 6/7): # 6/7 is the rate of the MNIST data
-    random.seed(datetime.now())
+def init(path, train_rate=6/7):
     con = sql.connect (host = 'localhost', user = 'sven', passwd = 'nevs', db='wescript')
     cur = con.cursor()
-    cur.execute('CREATE TABLE IF NOT EXISTS trainingPosts (post_id INT PRIMARY KEY, training BOOLEAN)')    
+    cur2 = con.cursor()
+    cur.execute('CREATE TABLE IF NOT EXISTS featurePosts (post_id INT PRIMARY KEY, ch_id INT,\
+tokenCount DOUBLE, n_tokenCount DOUBLE, validTokenCount DOUBLE, n_validTokenCount DOUBLE, nonStopwordRatio DOUBLE,\
+distinctWordRatio DOUBLE, overlapPrevious DOUBLE, overlapDistance DOUBLE, n_overlapDistance DOUBLE,\
+overlapChannel DOUBLE, clusterSize DOUBLE, n_clusterSize DOUBLE, overlapCluster DOUBLE, durationToPrevious DOUBLE,\
+n_durationToPrevious DOUBLE, comparedFrequency DOUBLE, durationToNext DOUBLE, n_durationToNext DOUBLE,\
+creationDuration DOUBLE, n_creationDuration DOUBLE, durationPerWord DOUBLE, n_durationPerWord DOUBLE,\
+holdBackDuration DOUBLE, n_holdBackDuration DOUBLE, postingTypeText BOOLEAN, postingTypeImage BOOLEAN,\
+postingTypeEquation BOOLEAN, imageIsHandmade BOOLEAN, punctuationLevel FLOAT,\
+endsWithQuestionmark BOOLEAN, containsLinebreak BOOLEAN, containsSlideReference BOOLEAN,\
+containsSmiley BOOLEAN, beginsWithAlphanumeric BOOLEAN, containsScriptTags BOOLEAN,\
+authorPostingRatio DOUBLE, authorPositiveRatio DOUBLE, authorNegativeRatio DOUBLE,\
+authorIsChannelOwner BOOLEAN)')
+
+    cur.execute('CREATE TABLE IF NOT EXISTS testPosts (post_id INT PRIMARY KEY, ch_id INT,\
+tokenCount DOUBLE, n_tokenCount DOUBLE, validTokenCount DOUBLE, n_validTokenCount DOUBLE, nonStopwordRatio DOUBLE,\
+distinctWordRatio DOUBLE, overlapPrevious DOUBLE, overlapDistance DOUBLE, n_overlapDistance DOUBLE,\
+overlapChannel DOUBLE, clusterSize DOUBLE, n_clusterSize DOUBLE, overlapCluster DOUBLE, durationToPrevious DOUBLE,\
+n_durationToPrevious DOUBLE, comparedFrequency DOUBLE, durationToNext DOUBLE, n_durationToNext DOUBLE,\
+creationDuration DOUBLE, n_creationDuration DOUBLE, durationPerWord DOUBLE, n_durationPerWord DOUBLE,\
+holdBackDuration DOUBLE, n_holdBackDuration DOUBLE, postingTypeText BOOLEAN, postingTypeImage BOOLEAN,\
+postingTypeEquation BOOLEAN, imageIsHandmade BOOLEAN, punctuationLevel FLOAT,\
+endsWithQuestionmark BOOLEAN, containsLinebreak BOOLEAN, containsSlideReference BOOLEAN,\
+containsSmiley BOOLEAN, beginsWithAlphanumeric BOOLEAN, containsScriptTags BOOLEAN,\
+authorPostingRatio DOUBLE, authorPositiveRatio DOUBLE, authorNegativeRatio DOUBLE,\
+authorIsChannelOwner BOOLEAN, quality INT)')
+
+    cur.execute('CREATE TABLE IF NOT EXISTS channelStatistics (ch_id INT PRIMARY KEY,\
+tokenCountMin DOUBLE, tokenCountMax DOUBLE, valdiTokenCountMin DOUBLE, validTokenCountMax DOUBLE,\
+creationDurationMin DOUBLE, creationDurationMax DOUBLE, durationPerWordMin DOUBLE, durationPerWordMax DOUBLE,\
+holdBackDurationMin DOUBLE,holdBackDurationMax DOUBLE, stemmedPosts BLOB, stemmedList BLOB, authorDict BLOB)')
+
+    cur.execute('CREATE TABLE IF NOT EXISTS assessedPosts (post_id INT PRIMARY KEY, assessed BOOLEAN, quality INT)')
+
+
+    cur.execute('DELETE FROM featurePosts')
+    cur.execute('DELETE FROM channelStatistics')
+    cur.execute('DELETE FROM assessedPosts')
+    cur.execute('DELETE FROM testPosts')
     con.commit()
-    cur.execute('DELETE FROM trainingPosts')
+
+    get_features(path)
+    cur.execute('UPDATE assessedPosts SET assessed = 1')
     con.commit()
     cur.execute('SELECT post_id FROM assessedPosts')
     c = list(cur)
     random.shuffle(c)
-    training = c[:round(rate*len(c))]
-    test = c[round(rate*len(c)):]
-    for row in training:
-        cur.execute('INSERT INTO trainingPosts VALUES (%s, %s)',(row[0],0))
+    test = c[round(train_rate*len(c)):]
     for row in test:
-        cur.execute('INSERT INTO trainingPosts VALUES (%s, %s)',(row[0],1))
+        cur2.execute('SELECT * FROM featurePosts WHERE post_id=%s',(row[0],))
+        fetch = cur2.fetchone()
+        cur2.execute('SELECT quality FROM assessedPosts WHERE post_id=%s',(row[0],))
+        fetch += cur2.fetchone()
+        cur2.execute('INSERT INTO testPosts VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',\
+tuple(r for r in fetch))
+        cur.execute('DELETE FROM assessedPosts WHERE post_id=%s',(row[0],))
+        cur.execute('DELETE FROM featurePosts WHERE post_id=%s',(row[0],))
     con.commit()
-    con.close()
+    con.close()    
+    
+##def train_test(rate = 6/7): # 6/7 is the rate of the MNIST data
+##    random.seed(datetime.now())
+##    con = sql.connect (host = 'localhost', user = 'sven', passwd = 'nevs', db='wescript')
+##    cur = con.cursor()   
+##    try:
+##        cur.execute('SELECT post_id FROM assessedPosts WHERE assessed=1')
+##    except:
+##        con.close()
+##        print('A problem occured while accessing the database. Have you initalized the module? [init(path)]')
+##    c = list(cur)
+##    random.shuffle(c)
+##    training = c[:round(rate*len(c))]
+##    test = c[round(rate*len(c)):]
+##    for row in training:
+##        cur.execute('INSERT INTO trainingPosts VALUES (%s, %s)',(row[0],1))
+##    for row in test:
+##        cur.execute('INSERT INTO trainingPosts VALUES (%s, %s)',(row[0],0))
+##    con.commit()
+##    con.close()
                      
-def next_batch(n = 100):
-    random.seed(datetime.now())
-    if n=='all':
-        rand = [random.choice(l) for i in range(len(l))]
-    else:
-        rand = [random.choice(l) for i in range(n)]
-    features = list()
+##def next_training_batch(n = 100):
+##    con = sql.connect (host = 'localhost', user = 'sven', passwd = 'nevs', db='wescript')
+##    cur = con.cursor()
+##    random.seed(datetime.now())
+##    assess = list()
+##    features = list()
+##    if n=='all':
+##        cur.execute('SELECT * FROM assessedPosts JOIN featurePosts ON assessedPosts.post_id = featurePosts.post_id WHERE assessed=1')
+##        for row in cur:
+##            assess.append(list(row)[2]+1)
+##            features.append(list(row)[5:])
+##    else:
+##        cur.execute('SELECT * FROM assessedPosts JOIN featurePosts ON assessedPosts.post_id = featurePosts.post_id WHERE assessed=1 ORDER BY RAND() LIMIT %s',(n,))
+##        for row in cur:
+##            assess.append(list(row)[2]+1)
+##            features.append(list(row)[5:])
+##    con.close()
+##    assess = numpy.eye(3)[assess]
+##    return (features, assess)
+
+def next_training_batch(n = 100):
+    con = sql.connect (host = 'localhost', user = 'sven', passwd = 'nevs', db='wescript')
+    cur = con.cursor()
+    cur.execute('SELECT quality, COUNT(*) FROM assessedPosts GROUP BY quality')
+    qualities = list()
+    fetch = cur.fetchone()
+    min_amount = fetch[1]
+    qualities.append(fetch[0])
+    for row in cur:
+        qualities.append(row[0])
+        if min_amount > row[1]:
+            min_amount = row[1]
     assess = list()
-    for li in rand:
-        features.append(li[-1])
-        assess.append(int(li[-2])+1)
-    assess = numpy.eye(3)[assess] # make one-hot-vector for every input in assess
+    features = list()
+    if n=='all':
+        for i in qualities:
+            cur.execute('SELECT * FROM assessedPosts JOIN featurePosts ON assessedPosts.post_id = featurePosts.post_id WHERE quality=%s AND assessed=1 LIMIT %s', (i,min_amount))
+            for row in cur:
+                assess.append(list(row)[2]+1)
+                features.append(list(row)[6:7]+list(row)[8:12]+list(row)[13:15]+list(row)[16:18]+list(row)[19:21]+list(row)[22:23]+list(row)[24:25]+list(row)[26:27]+list(row)[28:])
+    else:
+        cur.execute('SELECT * FROM assessedPosts JOIN featurePosts ON assessedPosts.post_id = featurePosts.post_id WHERE assessed=1 ORDER BY RAND() LIMIT %s',(n,))
+        for row in cur:
+            assess.append(list(row)[2]+1)
+            features.append(list(row)[3:4]+list(row)[5:9]+list(row)[10:12]+list(row)[13:15]+list(row)[16:18]+list(row)[19:20]+list(row)[21:22]+list(row)[23:24]+list(row)[25:])
+    con.close()
+    assess = numpy.eye(len(qualities))[assess]
+    return (features, assess)
+
+def next_test_batch():
+    con = sql.connect (host = 'localhost', user = 'sven', passwd = 'nevs', db='wescript')
+    cur = con.cursor()
+    assess = list()
+    features = list()
+    cur.execute('SELECT * FROM testPosts')
+    for row in cur:
+        assess.append(list(row)[-1]+1)
+        features.append(list(row)[3:4]+list(row)[5:9]+list(row)[10:12]+list(row)[13:15]+list(row)[16:18]+list(row)[19:20]+list(row)[21:22]+list(row)[23:24]+list(row)[25:-1])
+    con.close()
+    assess = numpy.eye(3)[assess]
     return (features, assess)
